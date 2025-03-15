@@ -11,6 +11,32 @@ function findChatContainer() {
   // デバッグ情報を出力
   console.log('Twitchチャットコンテナを検索中...');
   
+  // 最初に特定のSevenTVメッセージ要素を直接確認
+  const seventvMessages = document.querySelectorAll('[data-v-43cb0e29].seventv-chat-message-body, [data-v-43cb0e29].text-token');
+  if (seventvMessages.length > 0) {
+    console.log('SevenTV メッセージを直接検出しました。親要素を監視します。');
+    // 最初のメッセージの親要素を辿って監視対象を特定
+    let parent = seventvMessages[0].parentElement;
+    // 適切な親要素（複数のメッセージを含む要素）を見つける
+    for (let i = 0; i < 5 && parent; i++) { // 最大5レベル上まで確認
+      const siblings = Array.from(parent.querySelectorAll('[data-v-43cb0e29]'));
+      
+      if (siblings.length > 1) {
+        console.log('適切なチャットコンテナを検出しました:', parent);
+        observeChatMessages(parent);
+        return true;
+      }
+      parent = parent.parentElement;
+    }
+    
+    // 適切な親が見つからない場合は、最も近い親を使用
+    if (parent) {
+      console.log('最も近い親要素をコンテナとして使用します:', parent);
+      observeChatMessages(parent);
+      return true;
+    }
+  }
+  
   // セレクタの完全なリスト
   const selectors = [
     // 標準のTwitchコンテナ
@@ -23,6 +49,9 @@ function findChatContainer() {
     // SevenTV関連
     '.seventv-chat-list',
     '.seventv-chat-scrollable-area__message-container',
+    // SevenTV 新セレクタ（2025年3月更新）
+    '[data-v-43cb0e29]',
+    '.seventv-chat-message-body',
     
     // データ属性セレクタ
     '[data-test-selector="chat-scrollable-area__message-container"]',
@@ -70,10 +99,132 @@ function findChatContainer() {
       console.log('最初のチャット関連要素:', chatRelated[0].className || chatRelated[0].nodeName);
     }
     
-    // 3秒後に再試行
-    setTimeout(findChatContainer, 3000);
+    // 1秒後に再試行（3秒→1秒に短縮）
+    setTimeout(findChatContainer, 1000);
     return false;
   }
+}
+
+// ページ内のメッセージを直接検索して処理する関数
+function findAndProcessMessages() {
+  // より包括的なセレクタのリスト
+  const messageSelectors = [
+    // Twitch公式要素
+    '.chat-line__message',
+    '.chat-line__message-container',
+    '.chat-line',
+    '[data-a-target="chat-line-message"]',
+    '[data-test-selector="chat-line-message"]',
+    
+    // メッセージテキスト要素
+    '[data-a-target="chat-text-message"]',
+    '.text-fragment[data-a-target="chat-message-text"]',
+    '.chat-message',
+    '.text-token',
+    
+    // SevenTV関連
+    '.seventv-chat-message-body',
+    '.seventv-chat-message',
+    '[data-v-43cb0e29]'
+  ];
+  
+  let foundMessages = [];
+  
+  // 各セレクタで検索
+  for (const selector of messageSelectors) {
+    try {
+      const messages = document.querySelectorAll(selector);
+      if (messages.length > 0) {
+        console.log(`${selector} セレクタで ${messages.length} 個のメッセージを検出`);
+        foundMessages = foundMessages.concat(Array.from(messages));
+      }
+    } catch (error) {
+      console.log(`セレクタ ${selector} の検索中にエラーが発生:`, error);
+    }
+  }
+  
+  // 重複を削除
+  const uniqueMessages = [...new Set(foundMessages)];
+  
+  if (uniqueMessages.length > 0) {
+    console.log(`合計 ${uniqueMessages.length} 個のメッセージを直接検出しました。処理を開始します。`);
+    
+    // メッセージごとに処理し翻訳を試みる
+    uniqueMessages.forEach(message => {
+      processChatMessage(message);
+    });
+    
+    // 継続的な監視のためにdirectObserve関数を開始
+    startDirectObserving();
+    
+    return true;
+  }
+  
+  return false;
+}
+
+// メッセージの直接監視（コンテナを特定できない場合の代替手段）
+function startDirectObserving() {
+  console.log('メッセージの直接監視を開始します');
+  
+  // すでに監視中なら何もしない
+  if (observer) {
+    return;
+  }
+  
+  // チャットメッセージの可能性がある要素を監視する対象を決定
+  // チャット関連の親要素を見つける
+  const potentialContainers = [
+    document.querySelector('.chat-room__content'),
+    document.querySelector('.right-column__wrapper'),
+    document.querySelector('.stream-chat'),
+    document.querySelector('.chat-list'),
+    document.body // 最終手段
+  ];
+  
+  const container = potentialContainers.find(el => el !== null) || document.body;
+  
+  // MutationObserverの設定
+  observer = new MutationObserver(mutations => {
+    let newNodes = [];
+    
+    mutations.forEach(mutation => {
+      if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+        mutation.addedNodes.forEach(node => {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            newNodes.push(node);
+            
+            // 追加された要素内の潜在的なメッセージ要素も探す
+            const childMessages = node.querySelectorAll(
+              '.chat-line__message, [data-a-target="chat-text-message"], .text-token, .text-fragment, .seventv-chat-message-body'
+            );
+            
+            if (childMessages.length > 0) {
+              childMessages.forEach(msg => newNodes.push(msg));
+            }
+          }
+        });
+      }
+    });
+    
+    // 重複を削除し処理
+    if (newNodes.length > 0) {
+      console.log(`${newNodes.length}個の新規要素を検出`);
+      
+      [...new Set(newNodes)].forEach(node => {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          processChatMessage(node);
+        }
+      });
+    }
+  });
+  
+  // 監視を開始 - subtreeをtrueにして深い変更も監視
+  observer.observe(container, { childList: true, subtree: true });
+  console.log(`${container.tagName || 'UNKNOWN'} 要素の監視を開始しました (直接監視モード)`);
+  
+  // 初回実行として現在のメッセージを取得して処理
+  findAndProcessMessages();
 }
 
 // ページ全体の監視（最終手段）
@@ -171,13 +322,15 @@ function startObserving() {
     findChatContainer();
   }, 3000); // 3秒待機
   
-  // 10秒後にまだ設定されていない場合は、ページ全体を監視
+  // 5秒後にまだ設定されていない場合は、直接メッセージ検索モードに切り替え
   setTimeout(() => {
     if (!observer) {
-      console.log('チャットコンテナが見つからなかったため、ページ全体を監視します');
-      observeEntirePage();
+      console.log('チャットコンテナが見つからなかったため、直接メッセージ検索モードを開始します');
+      
+      // 直接監視モードを開始
+      startDirectObserving();
     }
-  }, 10000); // 10秒待機
+  }, 3000); // 3秒待機に短縮
 }
 
 // チャットメッセージの監視を停止
@@ -232,6 +385,11 @@ async function processChatMessage(messageNode) {
     return;
   }
   
+  // 自分が追加した翻訳要素ならスキップ
+  if (messageNode.classList && messageNode.classList.contains('twitch-deepl-translation')) {
+    return;
+  }
+  
   console.log('チャットメッセージを加工中:', messageNode.className || messageNode.nodeName);
   
   // 様々なセレクタを試す
@@ -267,14 +425,27 @@ async function processChatMessage(messageNode) {
   
   // メッセージのテキストの取得を試みる
   const textSelectors = [
-    '.text-token', // Twitchの実際の構造に基づくセレクタ
-    '.seventv-chat-message-body > .text-token', // 専用セレクタ
+    // 新しく確認されたTwitch公式のセレクタ
+    '[data-a-target="chat-text-message"]',
+    '[data-a-target="chat-message-text"]',
+    '.text-fragment[data-a-target="chat-message-text"]',
+    
+    // SevenTV関連セレクタ
+    '.text-token', 
+    '.seventv-chat-message-body > .text-token',
+    '[data-v-43cb0e29].text-token',
+    
+    // 一般的なセレクタ
     '.text-fragment', 
     '.message',
     '.chat-line__message--content',
-    '[data-a-target="chat-message-text"]',
     '.message-text',
-    '.chat-message'
+    '.chat-message',
+    
+    // バックアップセレクタ
+    'span[class*="text"]',
+    'div[class*="message"]',
+    'div[class*="chat"] span'
   ];
   
   let messageTextElement = null;
@@ -282,13 +453,18 @@ async function processChatMessage(messageNode) {
   
   // テキスト要素を探す
   for (const selector of textSelectors) {
-    messageTextElement = messageElement.querySelector(selector);
-    if (messageTextElement) {
-      messageText = messageTextElement.textContent.trim();
-      if (messageText) {
-        console.log('メッセージテキストを検出:', messageText.substring(0, 30) + (messageText.length > 30 ? '...' : ''));
-        break;
+    try {
+      messageTextElement = messageElement.querySelector(selector);
+      if (messageTextElement) {
+        messageText = messageTextElement.textContent.trim();
+        if (messageText) {
+          console.log('メッセージテキストを検出:', messageText.substring(0, 30) + (messageText.length > 30 ? '...' : ''));
+          break;
+        }
       }
+    } catch (error) {
+      console.log(`セレクタ ${selector} の処理中にエラーが発生しました:`, error);
+      // エラーがあっても処理を続行
     }
   }
   
@@ -377,8 +553,12 @@ function displayTranslation(messageNode, translatedText) {
   const messageElement = (
     messageNode.classList.contains('chat-line__message') ? messageNode : 
     messageNode.classList.contains('seventv-chat-message') ? messageNode : 
+    messageNode.classList.contains('seventv-chat-message-body') ? messageNode :
+    messageNode.hasAttribute && messageNode.hasAttribute('data-v-43cb0e29') ? messageNode :
     messageNode.querySelector('.chat-line__message') ||
     messageNode.querySelector('.seventv-chat-message') ||
+    messageNode.querySelector('.seventv-chat-message-body') ||
+    messageNode.querySelector('[data-v-43cb0e29]') ||
     messageNode.querySelector('[data-a-target="chat-line-message"]') ||
     messageNode
   );
@@ -388,39 +568,80 @@ function displayTranslation(messageNode, translatedText) {
   translationElement.className = 'twitch-deepl-translation';
   translationElement.textContent = `🇯🇵 ${translatedText}`;
   
-  // スタイル設定
+  // スタイル設定（より目立つように強化）
   translationElement.style.color = '#9b9b9b';
   translationElement.style.fontSize = '0.9em';
   translationElement.style.marginTop = '4px';
   translationElement.style.marginBottom = '4px';
   translationElement.style.fontStyle = 'italic';
   translationElement.style.padding = '2px 0';
-  translationElement.style.borderLeft = '2px solid #9147ff';
+  translationElement.style.borderLeft = '3px solid #9147ff';
   translationElement.style.paddingLeft = '8px';
   translationElement.style.marginLeft = '4px';
+  translationElement.style.backgroundColor = 'rgba(145, 71, 255, 0.05)';
+  translationElement.style.borderRadius = '2px';
+  translationElement.style.display = 'block';
+  translationElement.style.width = '95%';
+  translationElement.style.boxSizing = 'border-box';
+  translationElement.style.position = 'relative';
+  translationElement.style.zIndex = '10';
   
-  // 挿入先を特定
-  const insertTarget = (
-    // メッセージ本文の容器要素
-    messageElement.querySelector('.chat-line__message-container') ||
-    messageElement.querySelector('.chat-line__message--content') ||
-    // 上記が見つからない場合はメッセージ要素自体
-    messageElement
-  );
+  // チャットメッセージの挿入先候補を収集
+  const insertCandidates = [
+    // Twitch ネイティブ
+    messageElement.querySelector('.chat-line__message-container'),
+    messageElement.querySelector('.chat-line__message--content'),
+    messageElement.querySelector('.text-fragment')?.parentElement,
+    messageElement.querySelector('[data-a-target="chat-text-message"]')?.parentElement,
+    
+    // SevenTV
+    messageElement.querySelector('.seventv-chat-message-body'),
+    messageElement.closest('.seventv-chat-message-body'),
+    
+    // その他
+    messageElement,
+    messageNode
+  ];
+  
+  // 最初にnullでない要素を使用
+  const insertTarget = insertCandidates.find(element => element !== null && element !== undefined);
+  
+  if (!insertTarget) {
+    console.error('翻訳結果を挿入する場所が見つかりません');
+    return;
+  }
   
   // メッセージ要素の最後に翻訳を追加
   try {
-    insertTarget.appendChild(translationElement);
-    console.log('翻訳結果を表示しました');
+    // スタイルを保持するためにappendChildではなくinsertAdjacentElementを使用
+    insertTarget.insertAdjacentElement('beforeend', translationElement);
+    console.log('翻訳結果を表示しました', insertTarget);
   } catch (error) {
     console.error('翻訳結果の表示に失敗しました:', error);
+    
     // 代替手段として親要素に追加を試みる
     try {
-      messageNode.appendChild(translationElement);
-      console.log('代替手段で翻訳結果を表示しました');
+      if (insertTarget.parentElement) {
+        insertTarget.parentElement.appendChild(translationElement);
+        console.log('代替手段で翻訳結果を表示しました');
+      } else {
+        console.error('親要素が見つからないため、翻訳を表示できません');
+      }
     } catch (fallbackError) {
       console.error('翻訳結果の表示に完全に失敗しました:', fallbackError);
     }
+  }
+
+  // 翻訳要素を保存して重複処理を防止
+  if (messageElement.id) {
+    translatedComments.set(messageElement.id, true);
+  } else if (messageNode.id) {
+    translatedComments.set(messageNode.id, true);
+  } else {
+    // IDがない場合は一意のIDを生成
+    const randomId = `translated-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    messageElement.setAttribute('data-translation-id', randomId);
+    translatedComments.set(randomId, true);
   }
 }
 
