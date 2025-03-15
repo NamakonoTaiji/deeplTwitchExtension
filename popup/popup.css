@@ -1,0 +1,113 @@
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  margin: 0;
+  padding: 0;
+  width: 300px;
+  background-color: #18181b;
+  color: #efeff1;
+}
+
+.container {
+  padding: 15px;
+}
+
+h1 {
+  font-size: 16px;
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #9147ff;
+  text-align: center;
+}
+
+.status-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.info-section {
+  margin-bottom: 15px;
+  padding: 10px;
+  background-color: #1f1f23;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.buttons-section {
+  display: flex;
+  justify-content: center;
+}
+
+button {
+  background-color: #9147ff;
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+button:hover {
+  background-color: #772ce8;
+}
+
+/* トグルスイッチのスタイル */
+.toggle {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 24px;
+}
+
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: .4s;
+  border-radius: 24px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #9147ff;
+}
+
+input:checked + .slider:before {
+  transform: translateX(26px);
+}
+
+#status, #api-status {
+  font-weight: bold;
+}
+
+.error {
+  color: #ff4747;
+}
+
+.success {
+  color: #00ff95;
+}

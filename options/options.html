@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Twitch DeepL Translator 設定</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Twitch DeepL Translator 設定</h1>
+    
+    <div class="settings-section">
+      <h2>DeepL API設定</h2>
+      
+      <div class="form-group">
+        <label for="apiKey">DeepL APIキー:</label>
+        <input type="text" id="apiKey" placeholder="DeepL APIキーを入力してください">
+        <p class="help-text">
+          DeepL APIキーは <a href="https://www.deepl.com/pro-api" target="_blank">DeepL API</a> から取得できます。
+          無料版でも月50万文字までの翻訳が可能です。
+        </p>
+      </div>
+      
+      <div id="status-message" class="status-message"></div>
+      
+      <div class="button-group">
+        <button id="saveButton">保存</button>
+        <button id="testButton">APIテスト</button>
+      </div>
+    </div>
+    
+    <div class="settings-section">
+      <h2>翻訳設定</h2>
+      
+      <div class="form-group">
+        <label for="translationEnabled">翻訳機能:</label>
+        <label class="toggle">
+          <input type="checkbox" id="translationEnabled">
+          <span class="slider"></span>
+        </label>
+      </div>
+      
+      <!-- 将来的に追加する設定オプション用のスペース -->
+    </div>
+    
+    <div class="info-section">
+      <h2>使い方</h2>
+      <p>1. DeepL APIキーを入力して保存します。</p>
+      <p>2. 翻訳機能を有効にします。</p>
+      <p>3. Twitchを開くと、英語コメントの下に自動的に日本語翻訳が表示されます。</p>
+    </div>
+  </div>
+  
+  <script src="options.js"></script>
+</body>
+</html>

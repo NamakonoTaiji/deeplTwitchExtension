@@ -1,0 +1,175 @@
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  margin: 0;
+  padding: 20px;
+  background-color: #0e0e10;
+  color: #efeff1;
+}
+
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  background-color: #18181b;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+h1 {
+  color: #9147ff;
+  margin-top: 0;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+h2 {
+  color: #dedee3;
+  font-size: 18px;
+  margin-top: 0;
+  border-bottom: 1px solid #2d2d32;
+  padding-bottom: 10px;
+}
+
+.settings-section, .info-section {
+  margin-bottom: 30px;
+  padding: 15px;
+  background-color: #1f1f23;
+  border-radius: 5px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+input[type="text"] {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #3a3a3d;
+  background-color: #18181b;
+  color: #efeff1;
+  border-radius: 4px;
+  font-size: 16px;
+  box-sizing: border-box;
+}
+
+input[type="text"]:focus {
+  border-color: #9147ff;
+  outline: none;
+}
+
+.help-text {
+  margin-top: 5px;
+  font-size: 14px;
+  color: #adadb8;
+}
+
+.help-text a {
+  color: #bf94ff;
+  text-decoration: none;
+}
+
+.help-text a:hover {
+  text-decoration: underline;
+}
+
+.button-group {
+  display: flex;
+  gap: 10px;
+}
+
+button {
+  background-color: #9147ff;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background-color 0.2s;
+}
+
+button:hover {
+  background-color: #772ce8;
+}
+
+#testButton {
+  background-color: #3a3a3d;
+}
+
+#testButton:hover {
+  background-color: #5d5d64;
+}
+
+.status-message {
+  margin: 15px 0;
+  padding: 10px;
+  border-radius: 4px;
+  font-weight: 500;
+  display: none;
+}
+
+.status-message.success {
+  background-color: rgba(0, 255, 149, 0.1);
+  color: #00ff95;
+  border: 1px solid rgba(0, 255, 149, 0.3);
+  display: block;
+}
+
+.status-message.error {
+  background-color: rgba(255, 71, 71, 0.1);
+  color: #ff4747;
+  border: 1px solid rgba(255, 71, 71, 0.3);
+  display: block;
+}
+
+/* トグルスイッチのスタイル */
+.toggle {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 30px;
+}
+
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #3a3a3d;
+  transition: .4s;
+  border-radius: 30px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 22px;
+  width: 22px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #9147ff;
+}
+
+input:checked + .slider:before {
+  transform: translateX(30px);
+}

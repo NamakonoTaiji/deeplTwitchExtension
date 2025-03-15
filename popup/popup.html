@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Twitch DeepL Translator</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Twitch DeepL Translator</h1>
+    
+    <div class="status-section">
+      <p>翻訳機能: <span id="status">読み込み中...</span></p>
+      <label class="toggle">
+        <input type="checkbox" id="enableTranslation">
+        <span class="slider"></span>
+      </label>
+    </div>
+    
+    <div class="info-section">
+      <p id="api-status">DeepL API: チェック中...</p>
+    </div>
+    
+    <div class="buttons-section">
+      <button id="openOptions">設定</button>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
