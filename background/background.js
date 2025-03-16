@@ -23,7 +23,9 @@ const defaultSettings = {
   accentColor: '#9147ff',
   fontSize: 'medium',
   useCache: true, // キャッシュ機能の有効/無効
-  maxCacheAge: 24 // キャッシュの有効期間（時間）
+  maxCacheAge: 24, // キャッシュの有効期間（時間）
+  processExistingMessages: false, // 既存コメントを処理するかどうか
+  requestDelay: 100 // リクエスト間の最小遅延（ミリ秒）
 };
 
 // 設定データをロード
@@ -519,8 +521,17 @@ function resetStats() {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // 翻訳リクエスト
   if (message.action === 'translate') {
+    // キャッシュチェックを先に行う
+    const cachedResult = getCachedTranslation(message.text, message.sourceLang || 'auto');
+    if (cachedResult) {
+      sendResponse(cachedResult);
+      return true;
+    }
+    
     // 翻訳が無効の場合はエラーを返す
     if (!settings.enabled) {
+      // エラーログに詳細情報を追加
+      console.warn('翻訳機能が無効になっています。現在のsettings:', settings);
       sendResponse({ success: false, error: '翻訳機能が無効になっています' });
       return true;
     }
@@ -576,8 +587,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   // 設定更新の通知
   else if (message.action === 'settingsUpdated') {
-    initialize(); // 設定をリロード
-    sendResponse({ success: true });
+    // 設定を再ロード
+    initialize();
+    
+    // 設定更新時のデバッグ情報の追加
+    console.log('設定が更新されました:', { 
+      enabled: settings.enabled, 
+      hasApiKey: !!settings.apiKey,
+      translationMode: settings.translationMode
+    });
+    
+    // 現在のセッションIDを記録して、同期問題を回避
+    const sessionId = Date.now().toString();
+    chrome.storage.local.set({ 'settingsSessionId': sessionId });
+    
+    sendResponse({ success: true, sessionId });
     return true;
   }
   
@@ -608,6 +632,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       success: true, 
       message: 'キャッシュをクリアしました' 
     });
+    return true;
+  }
+  
+  // Content Scriptからの初期化通知
+  else if (message.action === 'contentScriptInitialized') {
+    console.log('Content Scriptが初期化されました。有効状態:', message.enabled);
+    // 必要に応じてsettingsの再同期を行うことも可能
+    sendResponse({ success: true });
     return true;
   }
   

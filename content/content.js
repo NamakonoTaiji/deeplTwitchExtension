@@ -34,6 +34,30 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
 async function initialize() {
   console.log('Twitch DeepL Translator: 初期化開始');
   
+  // 再度の初期化フラグをクリア
+  sessionStorage.removeItem('twitch_deepl_context_invalidated');
+  
+  // 後続の処理が失敗しても、直接ローカルストレージから読み込む
+  let manuallyLoaded = false;
+  
+  try {
+    // ローカルストレージから直接読み込み
+    const storedSettings = localStorage.getItem('twitch_deepl_settings');
+    if (storedSettings) {
+      try {
+        settings = JSON.parse(storedSettings);
+        isEnabled = settings.enabled;
+        apiKeySet = !!settings.apiKey;
+        console.log('初期化時にローカルストレージから設定を読み込みました');
+        manuallyLoaded = true;
+      } catch (parseError) {
+        console.error('ローカルストレージの設定の解析中にエラー:', parseError);
+      }
+    }
+  } catch (localStorageError) {
+    console.warn('ローカルストレージからの設定読み込みに失敗しました:', localStorageError);
+  }
+  
   // 設定を読み込む
   try {
     // バックグラウンドスクリプトから設定を取得
@@ -45,29 +69,154 @@ async function initialize() {
     console.log(`設定を読み込みました: 有効=${isEnabled}, APIキー設定済み=${apiKeySet}`);
     console.log('翻訳モード:', settings.translationMode);
     
+    // 設定をローカルストレージに保存（コンテキスト無効化への対策）
+    try {
+      localStorage.setItem('twitch_deepl_settings', JSON.stringify(settings));
+    } catch (storageError) {
+      console.warn('ローカルストレージへの設定保存に失敗しました:', storageError);
+    }
+    
+    // バックグラウンドスクリプトに初期化完了を通知
+    try {
+      chrome.runtime.sendMessage({ 
+        action: 'contentScriptInitialized',
+        enabled: isEnabled
+      }, response => {
+        if (chrome.runtime.lastError) {
+          console.warn('初期化通知エラー:', chrome.runtime.lastError);
+        } else {
+          console.log('初期化通知が成功しました');
+        }
+      });
+    } catch (notifyError) {
+      console.error('初期化通知失敗:', notifyError);
+    }
+    
     // 有効かつAPIキーがある場合は監視開始
     if (isEnabled && apiKeySet) {
       startObserving();
     }
   } catch (error) {
     console.error('設定読み込みエラー:', error);
+    
+    // 拡張機能コンテキストが無効化されたエラーの場合
+    if (error.message && error.message.includes('Extension context invalidated')) {
+      console.warn('拡張機能コンテキストが無効になりました。ローカル設定を使用します。');
+      
+      // manuallyLoadedがtrueの場合、すでにローカルストレージから読み込み済み
+      if (manuallyLoaded) {
+        console.log('すでにローカルストレージから設定を読み込み済みです');
+        if (isEnabled && apiKeySet) {
+          startObserving();
+        }
+        return; // ここで処理を終了
+      }
+      
+      // ローカルストレージから設定を読み込む試み
+      try {
+        const storedSettings = localStorage.getItem('twitch_deepl_settings');
+        if (storedSettings) {
+          settings = JSON.parse(storedSettings);
+          isEnabled = settings.enabled;
+          apiKeySet = !!settings.apiKey;
+          console.log('ローカルストレージから設定を復元しました');
+          
+          if (isEnabled && apiKeySet) {
+            startObserving();
+          }
+          return; // 処理成功のため終了
+        }
+      } catch (localStorageError) {
+        console.error('ローカルストレージからの設定読み込みエラー:', localStorageError);
+      }
+      
+      // 30秒後に再初期化を試行
+      setTimeout(() => {
+        console.log('拡張機能コンテキストの再接続を試みます...');
+        initialize();
+      }, 30000);
+    }
+    
+    // manuallyLoadedがtrueの場合、すでにローカルから読み込み済みのため終了
+    if (manuallyLoaded) {
+      return;
+    }
+    
     // デフォルトで無効に設定
-    isEnabled = false;
-    apiKeySet = false;
+    isEnabled = isEnabled || false;
+    apiKeySet = apiKeySet || false;
   }
 }
 
 // バックグラウンドスクリプトから設定を取得
-function getSettings() {
-  return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage({ action: 'getSettings' }, (response) => {
-      if (chrome.runtime.lastError) {
-        reject(chrome.runtime.lastError);
-      } else {
-        resolve(response);
-      }
-    });
+async function getSettings() {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage({ action: 'getSettings' }, (response) => {
+        if (chrome.runtime.lastError) {
+          const error = chrome.runtime.lastError;
+          console.warn('設定取得中のエラー:', error);
+          // エラー時はフォールバック処理へ
+          throw new Error(error.message || 'Unknown error');
+        } else {
+          // 成功した場合はローカルストレージに保存
+          try {
+            localStorage.setItem('twitch_deepl_settings', JSON.stringify(response));
+            console.log('バックグラウンドから設定を取得しました');
+          } catch (storageError) {
+            console.warn('ローカルストレージへの保存に失敗:', storageError);
+          }
+          resolve(response);
+        }
+      });
+    } catch (error) {
+      console.error('設定取得リクエストの送信中にエラーが発生しました:', error);
+      
+      // ローカルストレージからの設定読み込みを試みる
+      getSettingsFromLocalStorage().then(resolve).catch(() => {
+        // デフォルト設定を返す
+        console.log('デフォルト設定を使用します');
+        resolve(getDefaultSettings());
+      });
+    }
   });
+}
+
+// ローカルストレージから設定を読み込む
+async function getSettingsFromLocalStorage() {
+  return new Promise((resolve, reject) => {
+    try {
+      const storedSettings = localStorage.getItem('twitch_deepl_settings');
+      if (storedSettings) {
+        console.log('ローカルストレージから設定を取得しました');
+        resolve(JSON.parse(storedSettings));
+      } else {
+        reject(new Error('ローカルストレージに設定がありません'));
+      }
+    } catch (error) {
+      console.warn('ローカルストレージからの設定読み込みに失敗しました:', error);
+      reject(error);
+    }
+  });
+}
+
+// デフォルト設定を取得
+function getDefaultSettings() {
+  return {
+    apiKey: '',
+    enabled: false,
+    translationMode: 'selective',
+    japaneseThreshold: 30,
+    englishThreshold: 50,
+    displayPrefix: '🇯🇵',
+    textColor: '#9b9b9b',
+    accentColor: '#9147ff',
+    fontSize: 'medium',
+    useCache: true,
+    maxCacheAge: 24,
+    processExistingMessages: false,
+    requestDelay: 100
+  };
 }
 
 // チャットコンテナを検索
@@ -109,16 +258,26 @@ function observeChatMessages(container) {
 
   // MutationObserverの設定
   observer = new MutationObserver((mutations) => {
+    // 新規メッセージの処理間隔を開けるためのスロットリング
+    const addedNodes = [];
+    
     mutations.forEach((mutation) => {
       // 追加されたノードがある場合
       if (mutation.type === "childList" && mutation.addedNodes.length > 0) {
         mutation.addedNodes.forEach((node) => {
-          // チャットメッセージの要素を処理
+          // チャットメッセージの要素を収集
           if (node.nodeType === Node.ELEMENT_NODE) {
-            processChatMessage(node);
+            addedNodes.push(node);
           }
         });
       }
+    });
+    
+    // 収集したノードを遅延を付けて処理
+    addedNodes.forEach((node, index) => {
+      setTimeout(() => {
+        processChatMessage(node);
+      }, index * settings.requestDelay); // リクエスト間の最小遅延
     });
   });
 
@@ -126,21 +285,34 @@ function observeChatMessages(container) {
   observer.observe(container, { childList: true });
   console.log("監視を開始しました（childList: true）");
 
-  // 監視開始時に既存のチャットメッセージも処理
-  console.log("既存のチャットメッセージを処理します...");
-  const existingMessages = Array.from(container.children);
-  console.log(`${existingMessages.length}個の既存メッセージを処理します`);
+  // 監視開始時の既存メッセージ処理
+  if (settings.processExistingMessages) {
+    console.log("既存のチャットメッセージを処理します...");
+    const existingMessages = Array.from(container.children);
+    console.log(`${existingMessages.length}個の既存メッセージを処理します`);
 
-  // 既存要素を処理
-  existingMessages.forEach((element) => {
-    processChatMessage(element);
-  });
+    // 既存メッセージの処理間隔を開けてリクエストを分散させる
+    existingMessages.forEach((element, index) => {
+      setTimeout(() => {
+        processChatMessage(element);
+      }, index * settings.requestDelay); // ここで遅延を設定
+    });
+  } else {
+    console.log("既存メッセージの翻訳は無効に設定されています。");
+  }
 }
 
 // チャットメッセージの処理
 async function processChatMessage(messageNode) {
   // 拡張機能が無効またはAPIキーが設定されていない場合はスキップ
-  if (!isEnabled || !apiKeySet) {
+  if (!isEnabled) {
+    // デバッグ情報を追加
+    console.debug('翻訳機能が無効のため、処理をスキップします。現在の状態:', { isEnabled, apiKeySet });
+    return;
+  }
+  
+  if (!apiKeySet) {
+    console.debug('APIキーが設定されていないため、処理をスキップします。');
     return;
   }
   
@@ -206,6 +378,18 @@ async function processChatMessage(messageNode) {
     } else if (translationResult) {
       // エラーメッセージをコンソールに出力
       console.error('翻訳エラー:', translationResult.error);
+      
+      // 翻訳機能が無効になっている場合は、一時的に無効化
+      if (translationResult.error && translationResult.error.includes('翻訳機能が無効')) {
+        console.warn('バックグラウンドで翻訳機能が無効になっています。ローカル状態を更新します。');
+        isEnabled = false; // ローカル状態を更新
+        
+        // 30秒後に設定を再読み込み
+        setTimeout(async () => {
+          console.log('設定の再読み込みを試みます...');
+          await updateSettings();
+        }, 30000);
+      }
       
       // エラーが続く場合、拡張機能が無効になっている可能性がある
       if (translationResult.error && translationResult.error.includes('Extension context invalidated')) {
@@ -345,6 +529,12 @@ function sendTranslationRequest(text, sourceLang = 'auto') {
       chrome.runtime.sendMessage({ action: 'translate', text, sourceLang }, (response) => {
         if (chrome.runtime.lastError) {
           console.warn('翻訳リクエストエラー:', chrome.runtime.lastError.message);
+          
+          // コンテキスト無効化エラーの場合は再初期化を試みる
+          if (chrome.runtime.lastError.message.includes('Extension context invalidated')) {
+            handleContextInvalidated();
+          }
+          
           reject(chrome.runtime.lastError);
         } else {
           resolve(response);
@@ -352,18 +542,44 @@ function sendTranslationRequest(text, sourceLang = 'auto') {
       });
     } catch (error) {
       console.error('メッセージ送信エラー:', error);
-      // 拡張機能コンテキストが無効になった場合は、ページをリロードせずに静かに失敗する
-      if (error.message.includes('Extension context invalidated')) {
-        console.warn('拡張機能コンテキストが無効になりました。ページの再読み込みをお試しください。');
-        // コンテキスト無効化エラーの場合は監視を停止
-        if (observer) {
-          observer.disconnect();
-          observer = null;
-        }
+      
+      // 拡張機能コンテキストが無効になった場合の処理
+      if (error.message && error.message.includes('Extension context invalidated')) {
+        handleContextInvalidated();
       }
+      
       resolve({ success: false, error: error.message });
     }
   });
+}
+
+// コンテキスト無効化時の処理
+function handleContextInvalidated() {
+  console.warn('拡張機能コンテキストが無効になりました。自動再接続を試みます。');
+  
+  // 監視を停止
+  if (observer) {
+    observer.disconnect();
+    observer = null;
+  }
+  
+  // コンテキスト無効化が既に検出されている場合は再初期化しない
+  const contextInvalidatedFlag = sessionStorage.getItem('twitch_deepl_context_invalidated');
+  const now = Date.now();
+  const lastAttempt = parseInt(contextInvalidatedFlag || '0');
+  
+  // 最後の試行から30秒以上経過している場合のみ再試行
+  if (now - lastAttempt > 30000) {
+    sessionStorage.setItem('twitch_deepl_context_invalidated', now.toString());
+    
+    // 10秒後に再初期化を試行
+    setTimeout(() => {
+      console.log('拡張機能の再初期化を試みます...');
+      initialize();
+    }, 10000);
+  } else {
+    console.log('最近再初期化を試行したため、再試行をスキップします');
+  }
 }
 
 // 翻訳表示関数
@@ -458,6 +674,13 @@ async function updateSettings() {
     
     console.log('設定を更新しました');
     
+    // 設定をローカルストレージに保存（コンテキスト無効化への対策）
+    try {
+      localStorage.setItem('twitch_deepl_settings', JSON.stringify(settings));
+    } catch (storageError) {
+      console.warn('ローカルストレージへの設定保存に失敗しました:', storageError);
+    }
+    
     // 有効/無効状態に応じて監視を開始/停止
     if (isEnabled && apiKeySet) {
       if (!observer) {
@@ -468,6 +691,24 @@ async function updateSettings() {
     }
   } catch (error) {
     console.error('設定更新エラー:', error);
+    
+    // 拡張機能コンテキストが無効化されたエラーの場合
+    if (error.message && error.message.includes('Extension context invalidated')) {
+      console.warn('拡張機能コンテキストが無効になりました。再接続を試みます...');
+      
+      // ローカルストレージから設定を読み込む
+      try {
+        const storedSettings = localStorage.getItem('twitch_deepl_settings');
+        if (storedSettings) {
+          settings = JSON.parse(storedSettings);
+          isEnabled = settings.enabled;
+          apiKeySet = !!settings.apiKey;
+          console.log('ローカルストレージから設定を復元しました');
+        }
+      } catch (localStorageError) {
+        console.error('ローカルストレージからの設定読み込みエラー:', localStorageError);
+      }
+    }
   }
 }
 
@@ -505,7 +746,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       chrome.runtime.sendMessage({ action: 'ping' }, response => {
         // 当関数が終了する前にエラーが発生しなければコンテキストは有効
         // 次回の確認をスケジュール
-        setTimeout(checkExtensionContext, 60000); // 1分ごとに確認
+        const nextCheckTime = isEnabled ? 15000 : 60000; // 有効時は15秒ごと、無効時は1分ごと
+        setTimeout(checkExtensionContext, nextCheckTime);
       });
     } catch (error) {
       // エラーが発生した場合、拡張機能の再初期化を試みる
@@ -518,14 +760,48 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       observer = null;
       translatedComments.clear();
       
-      // 再初期化
-      setTimeout(initialize, 2000);
+      // 再初期化の試行回数のカウント
+      const retryCount = parseInt(sessionStorage.getItem('twitch_deepl_retry_count') || '0') + 1;
+      sessionStorage.setItem('twitch_deepl_retry_count', retryCount.toString());
       
-      // 次回の確認をスケジュール（再初期化の後）
-      setTimeout(checkExtensionContext, 10000);
+      // 一定回数以上失敗した場合は長い間隔を空ける
+      const delayTime = retryCount > 3 ? 30000 : 3000;
+      
+      // 再初期化
+      setTimeout(() => {
+        console.log('拡張機能の再初期化を試みます...(試行回数:' + retryCount + ')');
+        // ローカルストレージから設定を読み込み直す
+        try {
+          // 直接ローカルストレージから設定を取得する
+          const storedSettings = localStorage.getItem('twitch_deepl_settings');
+          if (storedSettings) {
+            settings = JSON.parse(storedSettings);
+            isEnabled = settings.enabled;
+            apiKeySet = !!settings.apiKey;
+            console.log('ローカルストレージから設定を直接読み込みました');
+            
+            // 有効かつAPIキーがあれば再度監視開始
+            if (isEnabled && apiKeySet) {
+              startObserving();
+            }
+          }
+        } catch (localStorageError) {
+          console.error('直接読み込み中のエラー:', localStorageError);
+        }
+        
+        // 通常の初期化も実行
+        initialize();
+      }, delayTime);
+      
+      // 次回のチェックを短い間隔で再実行
+      setTimeout(checkExtensionContext, 5000);
     }
   }
   
   // コンテキスト確認を開始
-  setTimeout(checkExtensionContext, 10000); // 初回の確認は10秒後
+  setTimeout(() => {
+    // カウンタをリセット
+    sessionStorage.setItem('twitch_deepl_retry_count', '0');
+    checkExtensionContext();
+  }, 5000); // 初回の確認は5秒後
 })();
