@@ -40,14 +40,132 @@
         </label>
       </div>
       
-      <!-- 将来的に追加する設定オプション用のスペース -->
+      <div class="form-group">
+        <label for="translationMode">翻訳モード:</label>
+        <select id="translationMode">
+          <option value="selective">選択的翻訳（日本語以外のメッセージのみ）</option>
+          <option value="all">すべてのメッセージを翻訳</option>
+          <option value="english">英語メッセージのみ翻訳</option>
+        </select>
+        <p class="help-text">メッセージの言語に応じて翻訳対象を選択できます。</p>
+      </div>
+      
+      <div class="form-group">
+        <label for="japaneseThreshold">日本語判定しきい値 (%):</label>
+        <input type="range" id="japaneseThreshold" min="10" max="50" step="5" value="30">
+        <span id="japaneseThresholdValue">30%</span>
+        <p class="help-text">メッセージ内の日本語文字の割合がこの値より高い場合、翻訳しません。</p>
+      </div>
+      
+      <div class="form-group">
+        <label for="englishThreshold">英語判定しきい値 (%):</label>
+        <input type="range" id="englishThreshold" min="30" max="70" step="5" value="50">
+        <span id="englishThresholdValue">50%</span>
+        <p class="help-text">メッセージ内の英語文字の割合がこの値より高い場合、翻訳対象と判定します。</p>
+      </div>
+    </div>
+    
+    <div class="settings-section">
+      <h2>表示設定</h2>
+      
+      <div class="form-group">
+        <label for="displayPrefix">翻訳テキストの接頭辞:</label>
+        <input type="text" id="displayPrefix" placeholder="例: 🇯🇵" value="🇯🇵">
+        <p class="help-text">翻訳テキストの前に表示する記号やテキスト。</p>
+      </div>
+      
+      <div class="form-group">
+        <label for="textColor">翻訳テキストの色:</label>
+        <input type="color" id="textColor" value="#9b9b9b">
+      </div>
+      
+      <div class="form-group">
+        <label for="accentColor">アクセントカラー:</label>
+        <input type="color" id="accentColor" value="#9147ff">
+      </div>
+      
+      <div class="form-group">
+        <label for="fontSize">テキストサイズ:</label>
+        <select id="fontSize">
+          <option value="small">小</option>
+          <option value="medium" selected>中</option>
+          <option value="large">大</option>
+        </select>
+      </div>
+    </div>
+    
+    <div class="settings-section">
+      <h2>パフォーマンス設定</h2>
+      
+      <div class="form-group">
+        <label for="useCache">翻訳キャッシュを使用:</label>
+        <label class="toggle">
+          <input type="checkbox" id="useCache" checked>
+          <span class="slider"></span>
+        </label>
+        <p class="help-text">同じメッセージの翻訳を再利用し、API使用量を削減します。</p>
+      </div>
+      
+      <div class="form-group">
+        <label for="maxCacheAge">キャッシュの有効期間（時間）:</label>
+        <input type="number" id="maxCacheAge" min="1" max="168" value="24">
+        <p class="help-text">キャッシュされた翻訳を保持する時間です。</p>
+      </div>
+      
+      <div class="button-group">
+        <button id="clearCacheButton" class="secondary">キャッシュをクリア</button>
+      </div>
+    </div>
+    
+    <div class="settings-section">
+      <h2>翻訳統計</h2>
+      
+      <div class="stats-container">
+        <div class="stats-item">
+          <span class="stats-label">総リクエスト数:</span>
+          <span id="totalRequests" class="stats-value">-</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">キャッシュヒット:</span>
+          <span id="cacheHits" class="stats-value">-</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">API呼び出し:</span>
+          <span id="apiRequests" class="stats-value">-</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">エラー数:</span>
+          <span id="errors" class="stats-value">-</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">翻訳文字数:</span>
+          <span id="charactersTranslated" class="stats-value">-</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">キャッシュサイズ:</span>
+          <span id="cacheSize" class="stats-value">-</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">最終リセット:</span>
+          <span id="lastReset" class="stats-value">-</span>
+        </div>
+      </div>
+      
+      <div class="button-group">
+        <button id="resetStatsButton" class="secondary">統計をリセット</button>
+      </div>
     </div>
     
     <div class="info-section">
       <h2>使い方</h2>
       <p>1. DeepL APIキーを入力して保存します。</p>
       <p>2. 翻訳機能を有効にします。</p>
-      <p>3. Twitchを開くと、英語コメントの下に自動的に日本語翻訳が表示されます。</p>
+      <p>3. 必要に応じて翻訳モードや表示設定をカスタマイズします。</p>
+      <p>4. Twitchを開くと、設定に基づいてチャットメッセージが自動翻訳されます。</p>
+    </div>
+    
+    <div class="button-group centered">
+      <button id="resetButton" class="secondary">設定をリセット</button>
     </div>
   </div>
   

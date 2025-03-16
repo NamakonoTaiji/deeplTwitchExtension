@@ -47,7 +47,7 @@ label {
   font-weight: 500;
 }
 
-input[type="text"] {
+input[type="text"], select, input[type="number"] {
   width: 100%;
   padding: 10px;
   border: 1px solid #3a3a3d;
@@ -58,9 +58,25 @@ input[type="text"] {
   box-sizing: border-box;
 }
 
-input[type="text"]:focus {
+input[type="text"]:focus, select:focus, input[type="number"]:focus {
   border-color: #9147ff;
   outline: none;
+}
+
+input[type="range"] {
+  width: calc(100% - 50px);
+  margin-right: 10px;
+  vertical-align: middle;
+}
+
+input[type="color"] {
+  width: 50px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: transparent;
 }
 
 .help-text {
@@ -83,6 +99,11 @@ input[type="text"]:focus {
   gap: 10px;
 }
 
+.button-group.centered {
+  justify-content: center;
+  margin-top: 20px;
+}
+
 button {
   background-color: #9147ff;
   color: white;
@@ -96,6 +117,14 @@ button {
 
 button:hover {
   background-color: #772ce8;
+}
+
+button.secondary {
+  background-color: #3a3a3d;
+}
+
+button.secondary:hover {
+  background-color: #5d5d64;
 }
 
 #testButton {
@@ -172,4 +201,31 @@ input:checked + .slider {
 
 input:checked + .slider:before {
   transform: translateX(30px);
+}
+
+/* 統計情報のスタイル */
+.stats-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.stats-item {
+  background-color: #18181b;
+  padding: 10px;
+  border-radius: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.stats-label {
+  font-weight: bold;
+}
+
+.stats-value {
+  font-family: monospace;
+  font-size: 16px;
+  color: #bf94ff;
 }
