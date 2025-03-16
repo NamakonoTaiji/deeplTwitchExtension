@@ -112,6 +112,21 @@
         <p class="help-text">キャッシュされた翻訳を保持する時間です。</p>
       </div>
       
+      <div class="form-group">
+        <label for="processExistingMessages">既存コメントを翻訳:</label>
+        <label class="toggle">
+          <input type="checkbox" id="processExistingMessages">
+          <span class="slider"></span>
+        </label>
+        <p class="help-text">ページ読み込み時の既存コメントを翻訳します。無効にするとパフォーマンスが向上します。</p>
+      </div>
+      
+      <div class="form-group">
+        <label for="requestDelay">リクエスト間隔（ミリ秒）:</label>
+        <input type="number" id="requestDelay" min="0" max="1000" value="100">
+        <p class="help-text">翻訳リクエスト間の最小間隔です。大きくするとエラーが減少します。</p>
+      </div>
+      
       <div class="button-group">
         <button id="clearCacheButton" class="secondary">キャッシュをクリア</button>
       </div>

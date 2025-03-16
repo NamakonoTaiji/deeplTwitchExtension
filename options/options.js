@@ -41,7 +41,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     accentColor: '#9147ff',
     fontSize: 'medium',
     useCache: true,
-    maxCacheAge: 24
+    maxCacheAge: 24,
+    processExistingMessages: false, // 既存コメントを処理するかどうか（デフォルトはfalse）
+    requestDelay: 100 // リクエスト間の最小遅延（ミリ秒）
   };
   
   // 保存された設定を読み込む
@@ -61,6 +63,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   fontSizeSelect.value = settings.fontSize;
   useCacheCheckbox.checked = settings.useCache;
   maxCacheAgeInput.value = settings.maxCacheAge;
+  
+  // 新しい設定オプションのUI初期化
+  const processExistingMessagesCheckbox = document.getElementById('processExistingMessages');
+  const requestDelayInput = document.getElementById('requestDelay');
+  
+  if (processExistingMessagesCheckbox) {
+    processExistingMessagesCheckbox.checked = settings.processExistingMessages;
+  }
+  
+  if (requestDelayInput) {
+    requestDelayInput.value = settings.requestDelay;
+  }
   
   // 統計情報を読み込む
   loadStats();
@@ -87,7 +101,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       accentColor: accentColorInput.value,
       fontSize: fontSizeSelect.value,
       useCache: useCacheCheckbox.checked,
-      maxCacheAge: parseInt(maxCacheAgeInput.value)
+      maxCacheAge: parseInt(maxCacheAgeInput.value),
+      processExistingMessages: document.getElementById('processExistingMessages')?.checked || false,
+      requestDelay: parseInt(document.getElementById('requestDelay')?.value || '100')
     };
     
     // 設定を保存
