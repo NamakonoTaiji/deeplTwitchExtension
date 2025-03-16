@@ -201,75 +201,98 @@ async function translateText(text, apiKey, sourceLang = 'EN') {
   stats.apiRequests++;
   stats.charactersTranslated += text.length;
   
-  // XMLHttpRequestを使用した翻訳関数
-  function translateWithXHR(text, apiKey, sourceLang) {
-    return new Promise((resolve, reject) => {
-      // APIキーが空の場合はエラー
-      if (!apiKey) {
-        stats.errors++;
-        reject(new Error('APIキーが設定されていません'));
-        return;
-      }
+  // 代替翻訳関数（fetchのみを使用）
+  async function translateWithBackupFetch(text, apiKey, sourceLang) {
+    // APIキーが空の場合はエラー
+    if (!apiKey) {
+      stats.errors++;
+      return { success: false, error: 'APIキーが設定されていません' };
+    }
+    
+    // APIエンドポイントを決定（フリーアカウントかProアカウントか）
+    const apiUrl = apiKey.endsWith(':fx') ? DEEPL_API_FREE_URL : DEEPL_API_PRO_URL;
+    
+    console.log(`DeepL API バックアップリクエスト送信先: ${apiUrl}`);
+    
+    // リクエストパラメータの構築
+    const requestParams = {
+      text: [text],
+      target_lang: 'JA'
+    };
+    
+    // ソース言語が指定されている場合は追加
+    if (sourceLang && sourceLang !== 'auto') {
+      requestParams.source_lang = sourceLang;
+    }
+    
+    try {
+      // DeepL APIにリクエスト（異なるオプションでfetchを再試行）
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `DeepL-Auth-Key ${apiKey}`,
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(requestParams),
+        // すべてのオプションを明示的に指定
+        cache: 'no-store',
+        redirect: 'follow',
+        referrerPolicy: 'no-referrer'
+      });
       
-      // APIエンドポイントを決定（フリーアカウントかProアカウントか）
-      const apiUrl = apiKey.endsWith(':fx') ? DEEPL_API_FREE_URL : DEEPL_API_PRO_URL;
+      // レスポンスのステータスをログに記録
+      console.log(`DeepL API バックアップレスポンスステータス: ${response.status}`);
       
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', apiUrl, true);
-      xhr.setRequestHeader('Content-Type', 'application/json');
-      xhr.setRequestHeader('Authorization', `DeepL-Auth-Key ${apiKey}`);
-      xhr.setRequestHeader('Accept', 'application/json');
+      // レスポンスを読み込む
+      const responseText = await response.text();
       
-      xhr.onload = function() {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const data = JSON.parse(xhr.responseText);
-            const result = {
-              success: true,
-              translatedText: data.translations[0].text,
-              detectedLanguage: data.translations[0].detected_source_language
-            };
-            
-            // 翻訳結果をキャッシュに保存
-            cacheTranslation(text, sourceLang, result);
-            
-            resolve(result);
-          } catch (error) {
-            stats.errors++;
-            reject(new Error('レスポンスの解析中にエラーが発生しました'));
-          }
-        } else {
+      try {
+        // JSONとしてパース
+        const data = JSON.parse(responseText);
+        
+        // エラーチェック
+        if (!response.ok) {
           stats.errors++;
-          try {
-            const errorData = JSON.parse(xhr.responseText);
-            reject(new Error(errorData.message || `エラーステータス: ${xhr.status}`));
-          } catch (e) {
-            reject(new Error(`エラーステータス: ${xhr.status}`));
-          }
+          console.error('DeepL API バックアップエラー:', response.status, data);
+          return { 
+            success: false, 
+            error: data.message || `バックアップエラー: ${response.status}` 
+          };
         }
-      };
-      
-      xhr.onerror = function() {
+        
+        // 翻訳結果
+        const result = {
+          success: true,
+          translatedText: data.translations[0].text,
+          detectedLanguage: data.translations[0].detected_source_language
+        };
+        
+        // 翻訳結果をキャッシュに保存
+        cacheTranslation(text, sourceLang, result);
+        
+        return result;
+      } catch (parseError) {
         stats.errors++;
-        reject(new Error('DeepL APIへの接続に失敗しました'));
-      };
-      
-      // リクエストパラメータの構築
-      const requestParams = {
-        text: [text],
-        target_lang: 'JA'
-      };
-      
-      // ソース言語が指定されている場合は追加
-      if (sourceLang && sourceLang !== 'auto') {
-        requestParams.source_lang = sourceLang;
+        console.error('DeepL API バックアップレスポンスのJSON解析エラー:', parseError);
+        console.error('受信したバックアップレスポンスの先頭部分:', responseText.substring(0, 200));
+        
+        return { 
+          success: false, 
+          error: '翻訳結果の解析に失敗しました。サーバーが正しいJSONを返していません。' 
+        };
       }
-      
-      xhr.send(JSON.stringify(requestParams));
-    });
+    } catch (error) {
+      stats.errors++;
+      console.error('バックアップ翻訳中のエラー:', error);
+      return { 
+        success: false, 
+        error: error.message || 'バックアップ翻訳中に予期せぬエラーが発生しました' 
+      };
+    }
   }
   
-  // まずfetchを試し、失敗した場合はXMLHttpRequestを使用
+  // 翻訳処理のメインロジック
   try {
     // APIキーが空の場合はエラー
     if (!apiKey) {
@@ -299,59 +322,77 @@ async function translateText(text, apiKey, sourceLang = 'EN') {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `DeepL-Auth-Key ${apiKey}`,
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache'
       },
       body: JSON.stringify(requestParams),
       credentials: 'omit',
-      mode: 'cors'
+      mode: 'cors',
+      cache: 'no-store',
+      redirect: 'follow',
+      referrerPolicy: 'no-referrer'
     });
     
     // レスポンスのステータスをログに記録
     console.log(`DeepL API レスポンスステータス: ${response.status}`);
     
-    // レスポンスをJSONとしてパース
-    const data = await response.json();
+    // レスポンスを読み込む
+    const responseText = await response.text();
     
-    // エラーチェック
-    if (!response.ok) {
+    try {
+      // JSONとしてパース
+      const data = JSON.parse(responseText);
+      
+      // エラーチェック
+      if (!response.ok) {
+        stats.errors++;
+        console.error('DeepL API エラー:', response.status, data);
+        return { 
+          success: false, 
+          error: data.message || `エラーステータス: ${response.status}` 
+        };
+      }
+      
+      // 翻訳結果
+      const result = {
+        success: true,
+        translatedText: data.translations[0].text,
+        detectedLanguage: data.translations[0].detected_source_language
+      };
+      
+      // 翻訳結果をキャッシュに保存
+      cacheTranslation(text, sourceLang, result);
+      
+      // 統計情報を保存（10回に1回）
+      if (stats.totalRequests % 10 === 0) {
+        saveStats();
+      }
+      
+      return result;
+    } catch (parseError) {
       stats.errors++;
-      console.error('DeepL API エラー:', data);
+      console.error('DeepL API レスポンスのJSON解析エラー:', parseError);
+      console.error('受信したレスポンスの先頭部分:', responseText.substring(0, 200));
+      
       return { 
         success: false, 
-        error: data.message || '翻訳中にエラーが発生しました' 
+        error: '翻訳結果の解析に失敗しました。サーバーが正しいJSONを返していません。' 
       };
     }
-    
-    // 翻訳結果
-    const result = {
-      success: true,
-      translatedText: data.translations[0].text,
-      detectedLanguage: data.translations[0].detected_source_language
-    };
-    
-    // 翻訳結果をキャッシュに保存
-    cacheTranslation(text, sourceLang, result);
-    
-    // 統計情報を保存（10回に1回）
-    if (stats.totalRequests % 10 === 0) {
-      saveStats();
-    }
-    
-    return result;
   } catch (error) {
     console.error('翻訳中のエラー (fetch使用時):', error);
     
-    // fetchが失敗した場合はXMLHttpRequestを代替手段として使用
-    console.log('fetchが失敗したため、XMLHttpRequestを使用して再試行します');
+    // fetchが失敗した場合は別の設定でfetchを再試行
+    console.log('最初のfetchが失敗したため、別の設定で再試行します');
     try {
-      const result = await translateWithXHR(text, apiKey, sourceLang);
+      const result = await translateWithBackupFetch(text, apiKey, sourceLang);
       return result;
-    } catch (xhrError) {
+    } catch (retryError) {
       stats.errors++;
-      console.error('翻訳中のエラー (XMLHttpRequest使用時):', xhrError);
+      console.error('再試行中のエラー:', retryError);
       return { 
         success: false, 
-        error: xhrError.message || '翻訳中に予期せぬエラーが発生しました' 
+        error: retryError.message || '翻訳中に予期せぬエラーが発生しました' 
       };
     }
   }
@@ -362,14 +403,76 @@ async function testApiKey(apiKey) {
   try {
     // サンプルテキストで翻訳をテスト
     console.log(`APIキーテスト: ${apiKey.substring(0, 5)}...`);
-    const testResult = await translateText('Hello, this is a test.', apiKey);
     
-    if (testResult.success) {
-      console.log('APIキーは有効です');
-      return { valid: true };
-    } else {
-      console.error('APIキーテスト失敗:', testResult.error);
-      return { valid: false, error: testResult.error };
+    // APIエンドポイントを決定
+    const apiUrl = apiKey.endsWith(':fx') ? DEEPL_API_FREE_URL : DEEPL_API_PRO_URL;
+    
+    // テストリクエストを送信
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `DeepL-Auth-Key ${apiKey}`,
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache'
+      },
+      body: JSON.stringify({
+        text: ['Hello, this is a test.'],
+        target_lang: 'JA'
+      }),
+      credentials: 'omit',
+      mode: 'cors',
+      cache: 'no-store',
+      redirect: 'follow',
+      referrerPolicy: 'no-referrer'
+    });
+    
+    console.log(`APIテストレスポンスステータス: ${response.status}`);
+    
+    // レスポンスをチェック
+    if (!response.ok) {
+      // レスポンスボディを読み込む
+      let errorDetails = '';
+      try {
+        const errorText = await response.text();
+        try {
+          const errorData = JSON.parse(errorText);
+          errorDetails = JSON.stringify(errorData);
+        } catch (jsonError) {
+          // JSON解析に失敗した場合はテキストをそのまま使用
+          errorDetails = errorText.substring(0, 200); // 最初の200文字だけ表示
+        }
+      } catch (textError) {
+        errorDetails = `レスポンスの読み込みに失敗: ${textError.message}`;
+      }
+      
+      console.error(`APIキーテスト失敗 (${response.status}):`, errorDetails);
+      return { valid: false, error: `ステータスコード: ${response.status} - ${errorDetails}` };
+    }
+    
+    // レスポンスをJSONとして解析
+    try {
+      // レスポンステキストを取得
+      const responseText = await response.text();
+      
+      try {
+        // JSONとしてパース
+        const data = JSON.parse(responseText);
+        
+        if (data && data.translations && data.translations.length > 0) {
+          console.log('APIキーは有効です');
+          return { valid: true };
+        } else {
+          console.error('APIキーテスト: 無効なレスポンス形式', data);
+          return { valid: false, error: '翻訳結果が不正な形式です' };
+        }
+      } catch (jsonError) {
+        console.error('APIキーテスト中のJSONエラー:', jsonError, responseText.substring(0, 200));
+        return { valid: false, error: `レスポンスの解析に失敗: ${jsonError.message}` };
+      }
+    } catch (textError) {
+      console.error('APIキーテスト中のレスポンス読み込みエラー:', textError);
+      return { valid: false, error: `レスポンスの読み込みに失敗: ${textError.message}` };
     }
   } catch (error) {
     console.error('APIキーテスト中のエラー:', error);
@@ -505,6 +608,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       success: true, 
       message: 'キャッシュをクリアしました' 
     });
+    return true;
+  }
+  
+  // Pingリクエスト - 拡張機能コンテキストの有効性確認用
+  else if (message.action === 'ping') {
+    sendResponse({ success: true, message: 'pong' });
     return true;
   }
 });

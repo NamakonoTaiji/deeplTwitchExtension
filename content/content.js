@@ -197,18 +197,31 @@ async function processChatMessage(messageNode) {
     const sourceLang = settings.translationMode === 'all' ? 'auto' : 'EN';
     const translationResult = await sendTranslationRequest(messageText, sourceLang);
     
-    if (translationResult.success) {
+    if (translationResult && translationResult.success) {
       // 翻訳結果を表示
       displayTranslation(messageElement, translationResult.translatedText);
       
       // 処理済みとしてマーク
       translatedComments.set(messageId, true);
-    } else {
+    } else if (translationResult) {
       // エラーメッセージをコンソールに出力
       console.error('翻訳エラー:', translationResult.error);
+      
+      // エラーが続く場合、拡張機能が無効になっている可能性がある
+      if (translationResult.error && translationResult.error.includes('Extension context invalidated')) {
+        console.warn('拡張機能コンテキストが無効になりました。監視を停止します。');
+        stopObserving();
+        return;
+      }
     }
   } catch (error) {
     console.error('翻訳リクエスト中のエラー:', error);
+    
+    // 重大なエラーの場合は監視を停止
+    if (error.message && error.message.includes('Extension context invalidated')) {
+      console.warn('拡張機能コンテキストが無効になりました。監視を停止します。');
+      stopObserving();
+    }
   }
 }
 
@@ -328,13 +341,28 @@ function shouldTranslate(text) {
 // 翻訳リクエストをバックグラウンドスクリプトに送信
 function sendTranslationRequest(text, sourceLang = 'auto') {
   return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage({ action: 'translate', text, sourceLang }, (response) => {
-      if (chrome.runtime.lastError) {
-        reject(chrome.runtime.lastError);
-      } else {
-        resolve(response);
+    try {
+      chrome.runtime.sendMessage({ action: 'translate', text, sourceLang }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.warn('翻訳リクエストエラー:', chrome.runtime.lastError.message);
+          reject(chrome.runtime.lastError);
+        } else {
+          resolve(response);
+        }
+      });
+    } catch (error) {
+      console.error('メッセージ送信エラー:', error);
+      // 拡張機能コンテキストが無効になった場合は、ページをリロードせずに静かに失敗する
+      if (error.message.includes('Extension context invalidated')) {
+        console.warn('拡張機能コンテキストが無効になりました。ページの再読み込みをお試しください。');
+        // コンテキスト無効化エラーの場合は監視を停止
+        if (observer) {
+          observer.disconnect();
+          observer = null;
+        }
       }
-    });
+      resolve({ success: false, error: error.message });
+    }
   });
 }
 
@@ -466,3 +494,38 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   return true;
 });
+
+// 拡張機能のコンテキスト変更を監視
+// 拡張機能が再読み込みされた場合に当処理を再度実行するため
+(() => {
+  // 拡張機能の初期化状態を確認する関数
+  function checkExtensionContext() {
+    try {
+      // ダミーメッセージを送信してコンテキストが有効か確認
+      chrome.runtime.sendMessage({ action: 'ping' }, response => {
+        // 当関数が終了する前にエラーが発生しなければコンテキストは有効
+        // 次回の確認をスケジュール
+        setTimeout(checkExtensionContext, 60000); // 1分ごとに確認
+      });
+    } catch (error) {
+      // エラーが発生した場合、拡張機能の再初期化を試みる
+      console.warn('拡張機能コンテキストが変更されました。再初期化します。', error);
+      
+      // 監視を停止
+      stopObserving();
+      
+      // 外部リソースの参照をクリア
+      observer = null;
+      translatedComments.clear();
+      
+      // 再初期化
+      setTimeout(initialize, 2000);
+      
+      // 次回の確認をスケジュール（再初期化の後）
+      setTimeout(checkExtensionContext, 10000);
+    }
+  }
+  
+  // コンテキスト確認を開始
+  setTimeout(checkExtensionContext, 10000); // 初回の確認は10秒後
+})();
